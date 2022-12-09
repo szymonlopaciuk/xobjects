@@ -110,12 +110,8 @@ class ContextPyopencl(XContext):
 
         Args:
             device (str or Device): The device (CPU or GPU) for the simulation.
-            default_kernels (bool): If ``True``, the Xfields defult kernels are
-                automatically imported.
-            patch_pyopencl_array (bool): If ``True``, the PyOpecCL class is patched to
-                allow some operations with non-contiguous arrays.
-            specialize_code (bool): If True, the code is specialized using
-                annotations in the source code. Default is ``True``
+            patch_pyopencl_array (bool): If ``True``, the PyOpenCL class is
+            patched to allow some operations with non-contiguous arrays.
 
         Returns:
             ContextPyopencl: context object.
@@ -124,6 +120,7 @@ class ContextPyopencl(XContext):
 
         super().__init__()
 
+        self.device_arg = device
         # TODO assume one device only
         if device is None:
             self.context = cl.create_some_context(interactive=False)
@@ -369,6 +366,11 @@ class ContextPyopencl(XContext):
         """
 
         return self._kernels
+
+    def __repr__(self):
+        if self.device_arg:
+            return f'ContextPyopencl:{self.device_arg}'
+        return 'ContextPyopencl'
 
 
 class BufferPyopencl(XBuffer):

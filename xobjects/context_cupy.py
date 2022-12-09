@@ -391,6 +391,7 @@ class ContextCupy(XContext):
 
         super().__init__()
 
+        self.device = device
         self.default_block_size = default_block_size
 
     def _make_buffer(self, capacity):
@@ -598,6 +599,11 @@ class ContextCupy(XContext):
         """
 
         return self._kernels
+
+    def __repr__(self):
+        if self.device:
+            return f"ContextCupy:{self.device}"
+        return "ContextCupy"
 
 
 class BufferCupy(XBuffer):

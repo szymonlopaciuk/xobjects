@@ -117,11 +117,6 @@ class ContextCpu(XContext):
         super().__init__()
         self.omp_num_threads = omp_num_threads
 
-        if self.omp_num_threads > 1:
-            raise NotImplementedError(
-                "OpenMP parallelization not yet supported!"
-            )
-
     def _make_buffer(self, capacity):
         return BufferNumpy(capacity=capacity, context=self)
 
@@ -132,7 +127,7 @@ class ContextCpu(XContext):
         specialize=True,
         apply_to_source=(),
         save_source_as=None,
-        extra_compile_args=["-O3", "-Wno-unused-function"],
+        extra_compile_args=["-O3", "-Wno-unused-function", "-fopt-info-vec-optimized"],
         extra_link_args=["-O3"],
         extra_cdef=None,
         extra_classes=[],
@@ -292,7 +287,6 @@ class ContextCpu(XContext):
                 spec.loader.exec_module(module)
 
                 if self.omp_num_threads > 0:
-                    raise NotImplementedError("OpenMP not supported for now!")
                     self.omp_set_num_threads = module.lib.omp_set_num_threads
 
                 # Get the methods
@@ -317,7 +311,7 @@ class ContextCpu(XContext):
                         if os.name == "nt" and ff.endswith(".pyd"):
                             # pyd files are protected on windows
                             continue
-                        os.remove(ff)
+                        # os.remove(ff)
         else:
             # Only kernel information, but no possibility to call the kernel
             for pyname, kernel in kernels.items():
@@ -334,6 +328,11 @@ class ContextCpu(XContext):
             self.kernels[
                 pyname
             ].description.pyname = pyname  # TODO: find better implementation?
+
+    def __repr__(self):
+        if self.omp_num_threads > 0:
+            return f"ContextCpu:{self.omp_num_threads}"
+        return "ContextCpu"
 
     def nparray_to_context_array(self, arr):
         """

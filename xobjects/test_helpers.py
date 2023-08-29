@@ -8,6 +8,7 @@ from typing import Callable, Iterable, Union
 
 import pytest
 
+import xobjects
 from .context import get_context_from_string, get_test_contexts
 
 
@@ -28,10 +29,11 @@ def _for_all_test_contexts_excluding(
 
     @wraps(test_function)
     def actual_test(*args, **kwargs):
-        kwargs["test_context"] = get_context_from_string(
-            kwargs["test_context"]
-        )
+        kwargs["test_context"] = get_context_from_string(kwargs["test_context"])
         test_function(*args, **kwargs)
+        if isinstance(kwargs["test_context"], xobjects.ContextPyopencl):
+            import gc
+            gc.collect()
 
     if len(test_context_names) == 0:
         return pytest.mark.skip(

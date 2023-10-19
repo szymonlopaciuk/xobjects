@@ -29,7 +29,7 @@ class StS(xo.Struct):
     s = xo.Float64
 
 
-buf = xo.context_default.new_buffer(2**20)
+buf = xo.get_a_context().new_buffer(2**20)
 al = [1, 2, 3]
 ar = np.array(al)
 

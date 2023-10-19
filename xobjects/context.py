@@ -392,7 +392,7 @@ class XContext(ABC):
 class XBuffer(ABC):
     def __init__(
         self,
-        capacity=1048576,
+        capacity=1024 * 1024,
         context=None,
         default_alignment=None,
         grow_step=None,

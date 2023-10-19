@@ -8,7 +8,7 @@ from inspect import isclass
 
 import numpy as np
 from .struct import Struct
-from .typeutils import context_default
+from .context_cpu import ContextCpu
 from .ref import Ref
 
 
@@ -281,7 +281,7 @@ class HybridClass(metaclass=MetaHybridClass):
         out = {"__class__": self.__class__.__name__}
         # Use a cpu copy by default:
         if copy_to_cpu:
-            obj = self.copy(_context=context_default)
+            obj = self.copy(_context=ContextCpu())
         else:
             obj = self
 

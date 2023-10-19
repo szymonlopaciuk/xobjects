@@ -11,7 +11,7 @@ import pytest
 
 def test_allocate_on_buffer_ctx_none_buff_none_offset_none():
     buffer, offset = allocate_on_buffer(size=16)
-    assert buffer.context.__class__ == xo.context_default.__class__
+    assert buffer.context.__class__ == xo.ContextCpu
     assert offset == 0
     assert buffer.capacity == 16
 
@@ -22,14 +22,14 @@ def test_allocate_on_buffer_ctx_none_buff_none_offset_given():
 
 
 def test_allocate_on_buffer_ctx_none_buff_given_offset_none():
-    original_buffer = xo.context_default.new_buffer(16)
+    original_buffer = xo.get_a_context().new_buffer(16)
     buffer, offset = allocate_on_buffer(size=16, buffer=original_buffer)
     assert buffer is original_buffer
     assert buffer.capacity >= 16
 
 
 def test_allocate_on_buffer_ctx_none_buff_given_offset_given():
-    original_buffer = xo.context_default.new_buffer(16)
+    original_buffer = xo.get_a_context().new_buffer(16)
     buffer, offset = allocate_on_buffer(
         size=16, buffer=original_buffer, offset=3
     )

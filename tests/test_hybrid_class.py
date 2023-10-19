@@ -160,7 +160,7 @@ def classes_for_test_hybrid_class_ref():
 def test_nested_hybrid_init_with_ref(classes_for_test_hybrid_class_ref):
     InnerClass, OuterClass = classes_for_test_hybrid_class_ref
 
-    buf = xo.context_default.new_buffer()
+    buf = xo.get_a_context().new_buffer()
 
     inner = InnerClass(a=1, b=[2, 3, 4], _buffer=buf)
     inner.z = 45
@@ -191,10 +191,11 @@ def test_nested_hybrid_init_with_ref(classes_for_test_hybrid_class_ref):
 def test_nested_hybrid_init_with_ref_different_buf(
     classes_for_test_hybrid_class_ref,
 ):
+    context = xo.get_a_context()
     InnerClass, OuterClass = classes_for_test_hybrid_class_ref
 
-    buf_inner = xo.context_default.new_buffer()
-    buf_outer = xo.context_default.new_buffer()
+    buf_inner = context.new_buffer()
+    buf_outer = context.new_buffer()
 
     inner = InnerClass(a=1, b=[2, 3, 4], _buffer=buf_inner)
 
@@ -205,7 +206,7 @@ def test_nested_hybrid_init_with_ref_different_buf(
 def test_nested_hybrid_setattr_with_ref(classes_for_test_hybrid_class_ref):
     InnerClass, OuterClass = classes_for_test_hybrid_class_ref
 
-    buf = xo.context_default.new_buffer()
+    buf = xo.get_a_context().new_buffer()
 
     inner = InnerClass(a=1, b=[2, 3, 4], _buffer=buf)
     inner.z = 45
@@ -269,10 +270,11 @@ def test_rename_with_ambiguous_fields_fails():
 def test_move_nested_objects_between_contexts_no_ref(
     classes_for_test_hybrid_class_no_ref,
 ):
+    context = xo.get_a_context()
     InnerClass, OuterClass = classes_for_test_hybrid_class_no_ref
 
-    buffer1 = xo.context_default.new_buffer()
-    buffer2 = xo.context_default.new_buffer()
+    buffer1 = context.new_buffer()
+    buffer2 = context.new_buffer()
 
     inner = InnerClass(a=2, b=range(10), _buffer=buffer1)
     outer = OuterClass(inner=inner, inner_renamed=inner, _buffer=buffer1)
@@ -294,7 +296,7 @@ def test_move_nested_objects_with_ref_fails(classes_for_test_hybrid_class_ref):
     inner = InnerClass(a=2, b=range(10))
     outer = OuterClass(inner=inner, inner_renamed=inner, _buffer=inner._buffer)
 
-    different_buffer = xo.context_default.new_buffer()
+    different_buffer = xo.get_a_context().new_buffer()
 
     with pytest.raises(MemoryError):
         outer.move(_buffer=different_buffer)
@@ -306,7 +308,7 @@ def test_move_field_of_nested_fails(classes_for_test_hybrid_class_ref):
     inner = InnerClass(a=2, b=range(10))
     outer = OuterClass(inner=inner, inner_renamed=inner, _buffer=inner._buffer)
 
-    different_buffer = xo.context_default.new_buffer()
+    different_buffer = xo.get_a_context().new_buffer()
 
     with pytest.raises(MemoryError):
         outer.inner.move(_buffer=different_buffer)

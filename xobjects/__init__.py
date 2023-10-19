@@ -28,7 +28,7 @@ from .context import Arg, Kernel, Method, get_user_context
 
 from .specialize_source import specialize_source
 
-from .typeutils import context_default, get_a_buffer
+from .typeutils import get_a_buffer, get_a_context, context_default
 
 from .hybrid_class import JEncoder, HybridClass, MetaHybridClass, ThisClass
 

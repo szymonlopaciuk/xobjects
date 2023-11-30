@@ -58,6 +58,23 @@ def _patch_pyopencl_array(cl, cla, ctx):
             buffer_dest[pos_dest + ibyte] = buffer_src[pos_src + ibyte];
             }
         }
+
+        __kernel void mask(
+            __global char* input,
+            char item_size,
+            __global int* mask,
+            int mask_count,
+            __global char* out,
+        )
+        {
+            for (int ii = 0; ii < mask_count; ii++) {
+                if (mask < 0) continue;
+                for (int jj = 0; jj < item_size; jj++) {
+                    int target = mask[ii];
+                    out[item_size * ii + jj] = input[item_size * target + jj]
+                }
+            }
+        }
         """,
     ).build()
 
@@ -154,6 +171,23 @@ def _patch_pyopencl_array(cl, cla, ctx):
         except AssertionError:
             return self.copy().get()
 
+    old_getitem = cla.Array.__getitem__
+
+    def mygetitem(self, *args, **kwargs):
+        if not kwargs and len(args) == 1 and args[0].dtype is np.dtype('bool'):
+            count = cla.sum(self)
+            mask = (2 * args[0] - 1) * cla.arange(self.queue, count)
+            res = cla.zeros(self.queue, shape=(count,), dtype=self.dtype)
+            prg.mask(
+                input=self,
+                item_size=self.dtype.itemsize,
+                mask=mask,
+                mask_count=len(mask),
+                out=res,
+            )
+            return res
+        return old_getitem(self, *args, **kwargs)
+
     def _cont_zeros_like_me(self):
         res = cla.zeros(
             self.queue,
@@ -163,13 +197,24 @@ def _patch_pyopencl_array(cl, cla, ctx):
         )
         return res
 
+    def _bool_operator(cls, operator: str):
+        operator_func = getattr(cls, operator)
+
+        def my_operator(self, *args):
+            res = operator_func(self, *args)
+            res.dtype = np.dtype('bool')
+            return res
+
+        my_operator.__name__ = operator
+        return my_operator
+
     # sum not implemented by pyopencl, I add it
-    def mysum(self):
+    def mysum(self, *args, **kwargs):
         dtype = getattr(np, self.dtype.name)
         try:
-            res = dtype(cla.sum(self).get())
+            res = dtype(cla.sum(self, *args, **kwargs).get())
         except RuntimeError:
-            res = dtype(cla.sum(self.copy()).get())
+            res = dtype(cla.sum(self.copy(), *args, **kwargs).get())
 
         return res
 
@@ -194,6 +239,14 @@ def _patch_pyopencl_array(cl, cla, ctx):
     cla.Array.real = property(myreal)
     cla.Array.sum = mysum
     cla.Array.mean = mymean
+
+    cla.Array.__eq__ = _bool_operator(cla.Array, '__eq__')
+    cla.Array.__ne__ = _bool_operator(cla.Array, '__ne__')
+    cla.Array.__lt__ = _bool_operator(cla.Array, '__lt__')
+    cla.Array.__le__ = _bool_operator(cla.Array, '__le__')
+    cla.Array.__gt__ = _bool_operator(cla.Array, '__gt__')
+    cla.Array.__ge__ = _bool_operator(cla.Array, '__ge__')
+    cla.Array.__getitem__ = mygetitem
 
     # sqrt available in clmath, add it to cla, so we can use it in nplike_lib
     from pyopencl.clmath import sqrt as clm_sqrt

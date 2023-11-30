@@ -176,7 +176,7 @@ def _patch_pyopencl_array(cl, cla, ctx):
     def mygetitem(self, *args, **kwargs):
         if not kwargs and len(args) == 1 and args[0].dtype is np.dtype('bool'):
             mask = args[0].view('int8')
-            mask_count = cla.sum(mask)
+            mask_count = int(cla.sum(mask).get())
             mask = (2 * mask - 1) * cla.arange(self.queue, len(self), dtype=np.dtype('int64'))
             res = cla.zeros(self.queue, shape=(mask_count,), dtype=self.dtype)
             prg.mask(

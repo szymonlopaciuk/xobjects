@@ -175,10 +175,10 @@ def _patch_pyopencl_array(cl, cla, ctx):
 
     def mygetitem(self, *args, **kwargs):
         if not kwargs and len(args) == 1 and args[0].dtype is np.dtype('bool'):
-            count = cla.sum(self)
             mask = args[0].view('int8')
-            mask = (2 * mask - 1) * cla.arange(self.queue, count, dtype=np.dtype('int64'))
-            res = cla.zeros(self.queue, shape=(count,), dtype=self.dtype)
+            mask_count = cla.sum(mask)
+            mask = (2 * mask - 1) * cla.arange(self.queue, len(self), dtype=np.dtype('int64'))
+            res = cla.zeros(self.queue, shape=(mask_count,), dtype=self.dtype)
             prg.mask(
                 input=self.view('int8'),
                 item_size=self.dtype.itemsize,
@@ -215,6 +215,8 @@ def _patch_pyopencl_array(cl, cla, ctx):
         try:
             assert kwargs.get('axis') is None
             kwargs.pop('axis', None)
+            assert kwargs.get('out') is None
+            kwargs.pop('out', None)
             res = dtype(cla.sum(self, *args, **kwargs).get())
             return res
         except (RuntimeError, AssertionError):

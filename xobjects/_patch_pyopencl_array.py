@@ -213,10 +213,14 @@ def _patch_pyopencl_array(cl, cla, ctx):
     def mysum(self, *args, **kwargs):
         dtype = getattr(np, self.dtype.name)
         try:
+            assert kwargs.get('axis') is None
+            kwargs.pop('axis', None)
             res = dtype(cla.sum(self, *args, **kwargs).get())
-        except RuntimeError:
-            res = dtype(cla.sum(self.copy(), *args, **kwargs).get())
+            return res
+        except (RuntimeError, AssertionError):
+            pass
 
+        res = dtype(cla.sum(self.copy(), *args, **kwargs).get())
         return res
 
     # mean not implemented by pyopencl, I add it

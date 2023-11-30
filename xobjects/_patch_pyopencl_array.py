@@ -64,14 +64,14 @@ def _patch_pyopencl_array(cl, cla, ctx):
             char item_size,
             __global int* mask,
             int mask_count,
-            __global char* out,
+            __global char* out
         )
         {
             for (int ii = 0; ii < mask_count; ii++) {
                 if (mask < 0) continue;
                 for (int jj = 0; jj < item_size; jj++) {
                     int target = mask[ii];
-                    out[item_size * ii + jj] = input[item_size * target + jj]
+                    out[item_size * ii + jj] = input[item_size * target + jj];
                 }
             }
         }
@@ -176,14 +176,15 @@ def _patch_pyopencl_array(cl, cla, ctx):
     def mygetitem(self, *args, **kwargs):
         if not kwargs and len(args) == 1 and args[0].dtype is np.dtype('bool'):
             count = cla.sum(self)
-            mask = (2 * args[0] - 1) * cla.arange(self.queue, count)
+            mask = args[0].view('int8')
+            mask = (2 * mask - 1) * cla.arange(self.queue, count, dtype=np.dtype('int64'))
             res = cla.zeros(self.queue, shape=(count,), dtype=self.dtype)
             prg.mask(
-                input=self,
+                input=self.view('int8'),
                 item_size=self.dtype.itemsize,
-                mask=mask,
+                mask=mask.view('int64'),
                 mask_count=len(mask),
-                out=res,
+                out=res.view('int8'),
             )
             return res
         return old_getitem(self, *args, **kwargs)

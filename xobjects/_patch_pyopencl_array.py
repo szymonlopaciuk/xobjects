@@ -7,6 +7,9 @@ import numpy as np
 
 
 def _patch_pyopencl_array(cl, cla, ctx):
+    import pyopencl.algorithm as clalg
+    import pyopencl.clmath as clm
+
     prg = cl.Program(
         ctx,
         """
@@ -59,20 +62,19 @@ def _patch_pyopencl_array(cl, cla, ctx):
             }
         }
 
-        __kernel void mask(
-            __global char* input,
-            char item_size,
-            __global int* mask,
-            int mask_count,
-            __global char* out
+        
+        __kernel void mask_to_indices(
+            __global char* mask,
+            int mask_length,
+            __global int* output,
+            int output_length
         )
         {
-            for (int ii = 0; ii < mask_count; ii++) {
-                if (mask < 0) continue;
-                for (int jj = 0; jj < item_size; jj++) {
-                    int target = mask[ii];
-                    out[item_size * ii + jj] = input[item_size * target + jj];
-                }
+            int target_slot = 0;
+            for (int ii = 0; ii < mask_length; ii++) {
+                if (mask[ii] == 0) continue;
+                output[target_slot] = ii;
+                target_slot++;
             }
         }
         """,
@@ -171,23 +173,35 @@ def _patch_pyopencl_array(cl, cla, ctx):
         except AssertionError:
             return self.copy().get()
 
-    old_getitem = cla.Array.__getitem__
+    _old_getitem = cla.Array.__getitem__
 
     def mygetitem(self, *args, **kwargs):
-        if not kwargs and len(args) == 1 and args[0].dtype is np.dtype('bool'):
-            mask = args[0].view('int8')
-            mask_count = int(cla.sum(mask).get())
-            mask = (2 * mask - 1) * cla.arange(self.queue, len(self), dtype=np.dtype('int64'))
-            res = cla.zeros(self.queue, shape=(mask_count,), dtype=self.dtype)
-            prg.mask(
-                input=self.view('int8'),
-                item_size=self.dtype.itemsize,
-                mask=mask.view('int64'),
-                mask_count=len(mask),
-                out=res.view('int8'),
-            )
-            return res
-        return old_getitem(self, *args, **kwargs)
+        """Extend the default __getitem__ with boolean masking.
+
+        Currently only supports a single argument. Falls back to
+        the pyopencl.Array.__getitem__ implementation.
+        """
+        key_type = None
+        if not kwargs and len(args) == 1:
+            key_type = getattr(args[0], 'dtype', None)
+
+        if key_type is not np.dtype('bool'):
+            return _old_getitem(self, *args, **kwargs)
+
+        mask = args[0].view('int8')
+        out_length = int(cla.sum(mask).get())
+        index = cla.empty(self.queue, shape=(out_length,), dtype=np.int32)
+        prg.mask_to_indices(
+            self.queue,
+            (1,),
+            None,
+            mask.data,
+            np.int32(len(mask)),
+            index.data,
+            np.int32(out_length),
+        )
+        return self[index]
+
 
     def _cont_zeros_like_me(self):
         res = cla.zeros(
@@ -225,6 +239,21 @@ def _patch_pyopencl_array(cl, cla, ctx):
         res = dtype(cla.sum(self.copy(), *args, **kwargs).get())
         return res
 
+    _old_all = cla.Array.all
+    def myall(self, *args, **kwargs):
+        assert kwargs.get('axis') is None
+        kwargs.pop('axis', None)
+        assert kwargs.get('out') is None
+        kwargs.pop('out', None)
+
+        arg = self
+        if self.dtype is np.dtype('bool'):
+            arg = self.view('int8')
+
+        res = _old_all(arg, *args, **kwargs)
+        return res
+
+
     # mean not implemented by pyopencl, I add it
     def mymean(self):
         return self.sum() / len(self)
@@ -246,6 +275,7 @@ def _patch_pyopencl_array(cl, cla, ctx):
     cla.Array.real = property(myreal)
     cla.Array.sum = mysum
     cla.Array.mean = mymean
+    cla.Array.all = myall
 
     cla.Array.__eq__ = _bool_operator(cla.Array, '__eq__')
     cla.Array.__ne__ = _bool_operator(cla.Array, '__ne__')
@@ -255,10 +285,8 @@ def _patch_pyopencl_array(cl, cla, ctx):
     cla.Array.__ge__ = _bool_operator(cla.Array, '__ge__')
     cla.Array.__getitem__ = mygetitem
 
-    # sqrt available in clmath, add it to cla, so we can use it in nplike_lib
-    from pyopencl.clmath import sqrt as clm_sqrt
-
-    cla.sqrt = clm_sqrt
+    # add sqrt to cla, so we can use it in nplike_lib
+    cla.sqrt = clm.sqrt
 
     # isnan is not available, but can be simulated easily
     cla.isnan = lambda ary: (ary != ary)

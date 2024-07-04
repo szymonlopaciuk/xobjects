@@ -44,6 +44,15 @@ except ImportError:
 
 from ._patch_pyopencl_array import _patch_pyopencl_array
 
+try:
+    import pyvkfft.fft as vkfft
+except ImportError:
+    vkfft = ModuleNotAvailable(
+        message=(
+            "pyvkfft is not installed. FFTPyopencl is not available!"
+        )
+    )
+
 openclheader: List[SourceType] = [
     """\
 #ifndef XOBJ_STDINT
@@ -525,43 +534,22 @@ class KernelPyopencl(object):
 
 
 class FFTPyopencl(object):
-    def __init__(self, context, data, axes, wait_on_call=True):
+    def __init__(self, context, data, axes):
         self.context = context
         self.axes = axes
-        self.wait_on_call = wait_on_call
 
         assert len(data.shape) > max(axes)
 
-        # Check internal dimensions are powers of two
-        for ii in axes[:-1]:
-            nn = data.shape[ii]
-            frac_part, _ = np.modf(np.log(nn) / np.log(2))
-            assert np.isclose(frac_part, 0), (
-                "PyOpenCL FFT requires"
-                " all dimensions apart from the last to be powers of two!"
-            )
-
-        import gpyfft
-
-        self._fftobj = gpyfft.fft.FFT(
-            context.context, context.queue, data, axes=axes
-        )
+        # Do it once to have pyvkfft cache the plan
+        _ = vkfft.ifftn(vkfft.fftn(data, axes=axes), axes=axes)
 
     def transform(self, data):
         """The transform is done inplace"""
-
-        (event,) = self._fftobj.enqueue_arrays(data)
-        if self.wait_on_call:
-            event.wait()
-        return event
+        data[:] = vkfft.fftn(data, axes=self.axes)[:]
 
     def itransform(self, data):
         """The transform is done inplace"""
-
-        (event,) = self._fftobj.enqueue_arrays(data, forward=False)
-        if self.wait_on_call:
-            event.wait()
-        return event
+        data[:] = vkfft.ifftn(data, axes=self.axes)[:]
 
 
 if _enabled:

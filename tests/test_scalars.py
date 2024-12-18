@@ -38,3 +38,7 @@ def test_scalar_buffer(test_context):
         vv = sc._from_buffer(buff, offset)
         assert nn == vv
         assert nn == sc(nn)
+
+
+def test_fail_on_purpose():
+    raise ValueError("Oh no, epic fail!")

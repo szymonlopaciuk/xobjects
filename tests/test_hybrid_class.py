@@ -330,3 +330,7 @@ def test_to_json_defaults():
     assert np.all(b_dict.pop("a") == [1, 2, 3])
     assert b_dict.pop("d") == 8
     assert b_dict == {}
+
+
+def test_fail_on_purpose_2():
+    raise ValueError("Oh no, epic fail againnnnn?!")

@@ -359,7 +359,7 @@ typedef unsigned int       uint32_t; //only_for_context cuda
 typedef unsigned short     uint16_t; //only_for_context cuda
 typedef unsigned char      uint8_t;  //only_for_context cuda
 
-#if defined(__CUDACC__) && !defined(__HIPCC__)
+#if defined(__CUDACC__) || defined(__HIPCC_RTC__)
 typedef signed long long   int64_t;
 typedef unsigned long long uint64_t;
 #endif

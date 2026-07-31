@@ -4,9 +4,13 @@
 # ########################################### #
 
 import logging
+import os
+import shutil
+import subprocess
+import tempfile
 
 import numpy as np
-from typing import List, Dict, Tuple
+from typing import Dict, List, Literal, Tuple
 
 from .context import (
     ModuleNotAvailable,
@@ -105,7 +109,11 @@ class ContextPyopencl(XContext):
                 print(f"Device   {ip}.{id}: {device.name}")
 
     def __init__(
-        self, device=None, patch_pyopencl_array=True, minimum_alignment=None
+        self,
+        device=None,
+        patch_pyopencl_array=True,
+        minimum_alignment=None,
+        backend: Literal[None, "opencl", "clang"] = None,
     ):
         """
         Creates a Pyopencl Context object, that allows performing the computations
@@ -119,6 +127,15 @@ class ContextPyopencl(XContext):
                 allow some operations with non-contiguous arrays.
             specialize_code (bool): If True, the code is specialized using
                 annotations in the source code. Default is ``True``
+            backend ("opencl" or "clang"): How kernel sources are turned into an
+                OpenCL program. ``"opencl"`` builds the OpenCL kernel source
+                directly through the vendor's own OpenCL compiler. ``"clang"``
+                (the default) instead compiles the source to SPIR-V with an
+                external ``clang++`` and loads it via ``clCreateProgramWithIL``,
+                which is needed on OpenCL implementations (e.g. NVIDIA's) whose
+                built-in compiler does not support C++ for OpenCL. The
+                environment variable ``XO_CL_BACKEND`` provides the same
+                selection.
 
         Returns:
             ContextPyopencl: context object.
@@ -126,6 +143,17 @@ class ContextPyopencl(XContext):
         """
 
         super().__init__()
+
+        if not backend:
+            backend = os.environ.get("XO_CL_BACKEND", "clang")
+
+        if backend not in ["opencl", "clang"]:
+            raise ValueError(
+                f"Backend {backend} is not supported for the Pyopencl context. "
+                "Only opencl and clang are allowed."
+            )
+
+        self.backend = backend
 
         # TODO assume one device only
         if device in self.context_cache:
@@ -244,9 +272,15 @@ class ContextPyopencl(XContext):
             "-cl-std=CL2.0",
             "-DXO_CONTEXT_CL",
         )
-        prg = cl.Program(self.context, specialized_source).build(
-            options=extra_compile_args,
-        )
+
+        if self.backend == "clang":
+            prg = self._build_program_with_clang(
+                specialized_source, extra_compile_args
+            )
+        else:
+            prg = cl.Program(self.context, specialized_source).build(
+                options=extra_compile_args,
+            )
 
         out_kernels = {}
         for pyname, kernel in kernel_descriptions.items():
@@ -268,6 +302,61 @@ class ContextPyopencl(XContext):
         platform_id = cl.get_platforms().index(self.platform)
         device_id = self.platform.get_devices().index(self.device)
         return f"{type(self).__name__}:{platform_id}.{device_id}"
+
+    def _find_clang(self):
+        override = os.environ.get("XO_CL_CLANG")
+        if override:
+            return override
+
+        found = shutil.which("clang++")
+        if found:
+            return found
+
+        raise RuntimeError(
+            "clang++ for the OpenCL context not found. Either install clang so that 'clang++' is on PATH,"
+            "or set the XO_CL_CLANG variable to the desired clang++ executable."
+        )
+
+    def _build_program_with_clang(self, source, compile_args=()):
+        """Compile C++ for OpenCL source to SPIR-V with clang, and load it via
+        clCreateProgramWithIL (bypassing the OpenCL implementation's own
+        compiler, which may not support C++ for OpenCL)."""
+        clang = self._find_clang()
+
+        src_fd, src_path = tempfile.mkstemp(suffix=".cl")
+        spv_fd, spv_path = tempfile.mkstemp(suffix=".spv")
+        os.close(src_fd)
+        os.close(spv_fd)
+        try:
+            with open(src_path, "w") as f:
+                f.write(source)
+
+            cmd = [
+                clang,
+                "-target",
+                "spirv64",
+                "-c",
+                *compile_args,
+                "-o",
+                spv_path,
+                src_path,
+            ]
+
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            if result.returncode != 0:
+                raise RuntimeError(
+                    f"clang OpenCL C++ compilation failed:\n{result.stderr}"
+                )
+
+            with open(spv_path, "rb") as f:
+                spirv = f.read()
+        finally:
+            if os.path.exists(src_path):
+                os.unlink(src_path)
+            if os.path.exists(spv_path):
+                os.unlink(spv_path)
+
+        return cl.Program(self.context, spirv).build()
 
     def nparray_to_context_array(self, arr, copy=False):
         """Copies a numpy array to the device memory.
